@@ -1,10 +1,8 @@
 # Walking access to food in 92 Mexican metropolitan areas
 
-Code for the paper "Which outlets count? The definition of a food source reverses the deprivation gradient in walking access to food across 92 Mexican metropolitan areas" (Benita, F., submitted).
+Code for the paper "Walking to the supermarket or the street stall? The reversal of food access gradients in 92 Mexican cities" (Benita, F., submitted).
 
 The pipeline measures walking distance over pedestrian street networks from every inhabited census block in Mexico's 92 metropolitan areas to the nearest food outlet under thirteen definitions. It then relates those distances to tract deprivation and vehicle availability, and writes every table and figure of the paper.
-
-The computed block, tract and area measures are released separately as a dataset: [Zenodo DOI of the data record].
 
 ## Contents
 
@@ -51,17 +49,3 @@ None of the inputs are redistributed here. All are public, and the notebooks exp
 | `Inputs/osm/` | OpenStreetMap contributors, Geofabrik extract of Mexico, snapshot of [date] | `mexico-latest.osm.pbf`; notebook 00 derives `mexico_walk.osm.pbf` from it |
 
 OpenStreetMap changes every day, so networks rebuilt from a later extract will differ slightly from those used in the paper. The networks used are included in the data record.
-
-## Running
-
-The notebooks were run in Google Colab with the project folder on Google Drive. The project root is read from the environment variable `MXO_BASE` and defaults to `/content/drive/MyDrive/Mexico_Obesity`. To run elsewhere, set `MXO_BASE` to the folder holding `Code/`, `Inputs/`, `Networks/` and `Results/`, and copy `code/mxo_utils.py` to `Code/`.
-
-Package versions are listed in `requirements.txt`.
-
-## Licence
-
-Code: MIT (see `LICENSE`). The data record carries its own licence.
-
-## Citation
-
-See `CITATION.cff`.
