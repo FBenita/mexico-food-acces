@@ -52,7 +52,7 @@ CRS_METRIC = 6372
 
 
 # ---------------------------------------------------------------------------
-# Sample-flow log: every filter writes one row, so attrition is auditable
+# Sample-flow log: every filter writes one row
 # ---------------------------------------------------------------------------
 
 _FLOW: list[dict] = []
@@ -235,18 +235,6 @@ def _norm_grade(s: pd.Series) -> pd.Series:
 def load_imu(path: str) -> pd.DataFrame:
     """
     CONAPO Indice de Marginacion Urbana 2020, AGEB level.
-
-    Two traps this handles:
-
-    1. CVE_AGEB in the distributed CSV is corrupted by scientific notation
-       (1.001E+11) for all-numeric AGEB codes, while codes containing a letter
-       survive as text. The key is rebuilt from ENT/MUN/LOC/AGEB instead.
-    2. IM_2020 and IMN_2020 run the OPPOSITE way to intuition: higher values
-       mean LESS marginalisation (a 'Muy bajo' AGEB scores ~0.98 on IMN_2020,
-       a 'Medio' one ~0.93). Dropping IM_2020 straight into a regression and
-       reading a positive coefficient as 'more deprived' inverts the result.
-       This returns `imu_depriv` = 1 - IMN_2020, so higher always means more
-       deprived, plus `imu_depriv_z`, its z-score.
     """
     df = pd.read_csv(path, dtype=str, encoding="latin1")
     df.columns = [c.strip() for c in df.columns]
@@ -283,15 +271,6 @@ def load_imu(path: str) -> pd.DataFrame:
 def load_grs(path: str, sheet: str = "GRS 2020") -> pd.DataFrame:
     """
     CONEVAL Grado de Rezago Social a nivel AGEB urbana 2020.
-
-    The workbook has a title block, a two-level header in rows 4 and 5 and two
-    footer lines, so positions are pinned explicitly rather than inferred.
-    Layout verified against the published file: one sheet, data in rows 7-61436,
-    61,430 unique 13-character keys in column 8, grade in column 28.
-
-    The grade is populated for ALL 61,430 AGEBs, including the ~2,700 where the
-    underlying indicators are suppressed, which makes it the right backfill for
-    tracts the IMU drops under its 20-dwelling rule.
     """
     raw = pd.read_excel(path, sheet_name=sheet, header=None, skiprows=6, dtype=str)
 
@@ -354,21 +333,6 @@ def macro_region(cve_ent: pd.Series) -> pd.Series:
 # Official metropolis typology
 # (SEDATU, CONAPO, INEGI: Metropolis de Mexico 2020)
 # ---------------------------------------------------------------------------
-#
-# The size tiers below are this project's own convention, with the 1 million cut
-# matching the official delimitation criterion and the 4 million cut matching
-# nothing published. This typology is different: it is the three-way
-# classification of the 92 metropolitan areas as published, from the same source
-# metros_92.csv already draws conapo_pop_2020 and conapo_surface_ha from. A
-# paper arguing that categories must be justified rather than inherited is on
-# firmer ground stratifying by a category someone else defined, published and
-# can be cited for. The cells are also usable at 48, 22 and 22, where the size
-# tiers leave only three metros in Tier 1.
-#
-# The typology is not a size ranking. A metropoli municipal is a metropolis
-# contained in a single municipality, which correlates with size but measures
-# administrative form, and a zona conurbada is the small end. Describe the
-# categories as what they are rather than relabelling them as size bands.
 
 CONAPO_ZM = (
     "Ciudad de Mexico", "Monterrey", "Guadalajara", "Toluca", "Puebla-Tlaxcala",
@@ -434,9 +398,6 @@ for _names, _t in ((CONAPO_ZM, TIPO_ZM), (CONAPO_MM, TIPO_MM), (CONAPO_ZC, TIPO_
     for _n in _names:
         _TIPO_LOOKUP[_slug1(_n)] = _t
 
-# Spellings this project may use that differ from the published table. Each maps
-# onto a name already in one of the three tuples above, so a typo here raises at
-# import rather than silently inventing a category.
 _TIPO_ALIASES = {
     "valledemexico": "Ciudad de Mexico",
     "zmvm": "Ciudad de Mexico",
@@ -499,11 +460,6 @@ if len(CONAPO_ZM) + len(CONAPO_MM) + len(CONAPO_ZC) != 92:
 
 def conapo_tipo(names) -> pd.Series:
     """
-    Map metro names onto the official typology, refusing to guess.
-
-    Raises with the unmatched names rather than returning NaN, because a silent
-    default on a crosswalk of this kind sends every unmatched area to whichever
-    class the default names.
     """
     slug = _slug_name(names)
     out = slug.map(_TIPO_LOOKUP)
@@ -521,10 +477,6 @@ def conapo_tipo(names) -> pd.Series:
 def load_metros(path: str | None = None, expected: int = 92) -> pd.DataFrame:
     """
     Load metros_92.csv and refuse to proceed on an incomplete crosswalk.
-
-    Adds two stratifiers. `tier` is this project's own size convention.
-    `tipo` is the published SEDATU/CONAPO/INEGI classification, which is the
-    one to prefer wherever a stratification has to be justified in print.
     """
     path = path or f"{DIRS['inputs']}/metros_92.csv"
     df = pd.read_csv(path, dtype={"conapo_pop_2020": "Int64"})
@@ -579,11 +531,6 @@ def _coords(geom):
 def _edge_key(coords, ndigits: int = 2) -> bytes:
     """
     Direction-normalised hash of an edge's full geometry.
-
-    The endpoint pair is ordered before hashing, so the reversed copy OSMnx
-    writes under `bidirectional=True` collapses onto the forward one, while two
-    genuinely parallel edges between the same nodes keep distinct keys because
-    their intermediate vertices differ.
     """
     import hashlib
 
@@ -596,7 +543,6 @@ def _edge_key(coords, ndigits: int = 2) -> bytes:
 def first_layer(path: str) -> str:
     """
     Name of a GeoPackage's first (or first edge-like) layer, without fiona.
-
     Colab no longer ships fiona, so pyogrio is used, with a fiona fallback for
     environments that still have it.
     """
@@ -612,13 +558,7 @@ def first_layer(path: str) -> str:
 
 def read_gpkg(path: str, columns=None, layer: str | None = None):
     """
-    Read a GeoPackage, surviving mis-encoded text fields.
-
-    Some GeoPackages store latin1 bytes in their name columns although the
-    format is nominally UTF-8, so a plain read fails on the first accented name.
-    Passing `columns` avoids decoding those fields at all, which is also faster.
-    If a field that is needed cannot be decoded, the read falls back to fiona
-    with an explicit encoding.
+    Read a GeoPackage
     """
     import geopandas as gpd
 
@@ -642,9 +582,6 @@ def read_gpkg(path: str, columns=None, layer: str | None = None):
 def dedupe_edges(net):
     """
     Collapse the two directed copies OSMnx exports for every walkable way.
-
-    Summing length over the exported frame would count every way twice.
-    Returns the undirected edge set.
     """
     keys = []
     for geom in net.geometry.values:
@@ -673,11 +610,6 @@ def endpoint_degrees(net, ndigits: int = 1):
 def intersection_nodes(net, min_degree: int = 3):
     """
     Real intersections, reconstructed from edge endpoints.
-
-    The saved networks hold edges only, but OSMnx already merged degree-two
-    nodes during simplification, so a surviving endpoint touched by three or
-    more edge ends is an intersection. This yields intersection density, the
-    measure Frank, Sallis and Boeing actually use, without re-extracting OSM.
     """
     import geopandas as gpd
     from shapely.geometry import Point
@@ -771,16 +703,6 @@ def edge_endpoint_nodes(net, ndigits: int = 1):
 def component_summary(net, ndigits: int = 1):
     """
     Connected components of an edge layer, and how much length each holds.
-
-    Exists to answer one question about the saved pedestrian networks: were the
-    disconnected parts of each metro thrown away during extraction? OSMnx does
-    that whenever `retain_all=False` or `largest_component` is called, and it is
-    silent. A metro whose saved network has exactly one component, in a country
-    whose metropolitan areas are unions of whole municipios and routinely
-    contain detached towns, has almost certainly been through that step.
-
-    Returns a dict: n_components, n_nodes, n_edges, total_km, largest_km,
-    largest_share, and km_outside_largest.
     """
     from scipy.sparse import coo_matrix
     from scipy.sparse.csgraph import connected_components
@@ -831,11 +753,6 @@ from datetime import datetime, timezone
 def network_fingerprint(path: str | None = None) -> str:
     """
     Short hash of the pedestrian network files currently in use.
-
-    Built from the folder name, the file names and their sizes. Sizes rather
-    than modification times, because copying a folder on Drive rewrites every
-    mtime without changing a byte, and a fingerprint that changes when nothing
-    has changed is as bad as one that does not change when something has.
     """
     path = path or DIRS["networks"]
     files = sorted(_glob.glob(os.path.join(path, "*_pedestrian.gpkg")))
@@ -923,18 +840,6 @@ class Report:
         ...                                  # the notebook runs as usual
         rep.add_table('attribution audit', df_diag)
         rep.save()
-
-    `start` writes a header recording the module version, the library versions,
-    which pedestrian networks are in use and their fingerprint, the cache
-    directory, and the size and age of every input file that matters, then tees
-    stdout so every print lands in the file as well as on screen. Writing goes
-    to local disk and is flushed as it happens, so a disconnected runtime still
-    leaves a usable partial report. `save` appends any tables, copies the file
-    to the logs folder on Drive, and offers it for download.
-
-    The header exists because the hardest failures to see are the ones where a
-    notebook runs to completion on the wrong inputs. Reading it takes a second
-    and settles what actually went in.
     """
 
     def __init__(self, name: str, local_dir: str = "/content"):
